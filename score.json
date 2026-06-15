@@ -1,21 +1,21 @@
 {
   "team": "solo858-team-name",
-  "phase": "public",
-  "headline": 100.0,
+  "phase": "private",
+  "headline": 99.9,
   "sub": {
-    "correct": 0.965,
-    "quality": 0.979,
+    "correct": 0.725,
+    "quality": 0.835,
     "error": 1.0,
-    "latency": 0.6377,
-    "cost": 0.7264,
-    "drift": 0.8299,
-    "prompt": 0.9397
+    "latency": 0.713,
+    "cost": 0.5733,
+    "drift": 0.7484,
+    "prompt": 0.8161
   },
-  "diag_f1": 0.952,
-  "n": 120,
-  "n_correct": 111,
+  "diag_f1": 1.0,
+  "n": 80,
+  "n_correct": 55,
   "judge_mode": "offline",
   "weights_hash": "e81a8ed58d93",
-  "key_hash": "9a800fa6968d",
-  "sig": "6591ff9005ddd19f4308a1777e5039a10cf8182b4294ee8f63ed50b8ce494222"
+  "key_hash": "7e3905b75db0",
+  "sig": "5db663ae6ab3e251db543b63c67b05e182043134b9461970979df8a67004155c"
 }

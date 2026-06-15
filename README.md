@@ -1,81 +1,92 @@
-# Observathon — Bộ công cụ cho Học viên
+# Observathon — Lời giải (team **solo858**)
 
-🇻🇳 Tiếng Việt | [🇬🇧 English](README_en.md)
+Agent e-commerce **hộp đen, im lặng, đầy bug** chạy trên LLM thật. Nhiệm vụ: **gắn observability →
+chẩn đoán lỗi → sửa** qua `config` + `prompt` + `wrapper`, rồi `git push`.
 
-Bạn được giao một agent thương mại điện tử **hộp đen, im lặng, đầy lỗi** (dạng binary) chạy
-trên một **LLM thật**. Nó không cho bạn biết gì cả. Nhiệm vụ của bạn: **gắn quan sát, chẩn
-đoán lỗi, và sửa chúng** — bằng cách sửa config, **viết lại system prompt của agent**, và thêm
-một lớp wrapper giảm thiểu lỗi.
+> 🏆 **Public score: 100 / 100** · Private: *chờ binary (wrapper đã hardening sẵn)*
+> Đề bài gốc (student kit): [README_en.md](README_en.md)
 
-## Cài đặt (bắt buộc có một LLM thật)
-```bash
-# 1. chọn một engine:
-export OPENAI_API_KEY=sk-...        # đám mây (model mặc định gpt-5.4-nano), HOẶC
-#    local miễn phí: chạy Ollama / llama.cpp (tương thích OpenAI), đặt provider:"local" + LOCAL_BASE_URL trong config.json
+---
 
-# 2. kiểm tra khung bài nộp (chỉ stdlib, không cần key)
-python harness/selfcheck.py
+## ⚙️ Cách chạy (Docker — đã xác nhận)
 
-# 3. chạy binary mô phỏng giai đoạn PRACTICE (trong bin/practice/)
-./bin/practice/observathon-sim --config solution/config.json --wrapper solution/wrapper.py \
-    --out run_output.json --concurrency 8
-#   macOS lần đầu: xattr -dr com.apple.quarantine bin/practice/observathon-sim
-#   Windows:      bin\practice\observathon-sim\observathon-sim.exe ...   (exe lives INSIDE its folder)
+Binary Windows lỗi loader (Win32 998), nên chạy **binary Linux trong Docker** `python:3.12-slim`
+(glibc 2.41). Key OpenAI để trong `.env`.
+
+```powershell
+python harness\selfcheck.py     # 1. self-check submission
+
+.\run_public.ps1                # 2. chạy public sim (LLM thật) qua Docker
+.\score_public.ps1              # 3. chấm điểm -> score.json
+
+# private (khi có bin/private/): .\run_public.ps1 private ; .\score_public.ps1 private
 ```
-Agent **không phát ra gì cả** và `run_output.json` **cố tình tối giản** — mỗi dòng chỉ có
-`answer` + `status` (không có latency, tokens, lời gọi tool, hay trace). Cách DUY NHẤT để thấy
-latency, chi phí, số lần gọi tool, vòng lặp, drift và PII là **gắn quan sát trong
-`solution/wrapper.py`**: `call_next()` trả về kết quả ĐẦY ĐỦ (gồm `meta` + `trace`) cho BẠN —
-hãy ghi lại bằng bộ `telemetry/` đã học ở Ngày 13. (Sim cũng ghi một khối `sealed` đã ký dành
-cho việc chấm điểm — đó không phải phần quan sát của bạn.)
 
-## Bạn tối ưu cái gì (đòn bẩy v6)
-Agent **điều khiển bằng prompt** và được giao kèm một system prompt **cố tình tệ** (nó bịa ra
-tổng tiền, tính sai, gọi tool dư thừa, lặp lại email/sđt của khách, và **làm theo chỉ dẫn ẩn
-trong ghi chú đơn hàng**). **Hãy viết lại `solution/prompt.txt`** — đây là cách sửa có đòn bẩy
-cao nhất và là một thành phần điểm **`prompt` chiếm 15%**. Xem
-**[`docs/PROMPT_OPTIMIZATION.md`](docs/PROMPT_OPTIMIZATION.md)**.
+---
 
-| Bạn chỉnh | Tác dụng |
-|---|---|
-| `solution/config.json` | các knob (provider/model, temperature, retry, cache, normalize, redact, `self_consistency`, `tool_budget`, `planner`, …) |
-| `solution/prompt.txt` | **system prompt** của agent — viết lại nó |
-| `solution/examples.json` | few-shot (tùy chọn) |
-| `solution/wrapper.py` | `mitigate()` — quan sát + retry/cache/route/redact/sanitize + định tuyến prompt theo từng request |
-| `solution/findings.json` | chẩn đoán (loại lỗi + bằng chứng + nguyên nhân gốc) |
+## 🛠️ Cách làm (các bước)
 
-## Chọn binary cho HĐH của bạn (`bin/<phase>/`)
-| HĐH / kiến trúc | tệp |
-|---|---|
-| macOS (Apple Silicon, M1+) | `observathon-sim` / `observathon-score` (arm64) |
-| Windows | unzip the folder, run `observathon-sim\observathon-sim.exe` / `observathon-score\observathon-score.exe` (keep the folder intact) |
-| Linux | `observathon-sim` / `observathon-score` (x86_64) |
+1. **Quan sát** — `solution/wrapper.py::mitigate()` ghi telemetry (latency, cost, tokens, tool count,
+   PII, span trace) vào `logs/` + `traces/`. Agent im lặng nên đây là **nguồn chẩn đoán duy nhất**.
+2. **Chẩn đoán** — chạy config gốc (hỏng) vs đã sửa, đối chiếu số đo → **11 fault** trong
+   [`solution/findings.json`](solution/findings.json). Bằng chứng *broken → fixed*:
+   `max_steps 21→0` · `PII rò 25→0` · `latency p99 27.4s→14.5s` · `token 29k→9.9k`.
+3. **Sửa `config.json`** — tắt knob lỗi inject (`tool_error_rate`, `session_drift_rate`,
+   `catalog_override`), bật `retry`/`cache`/`redact_pii`/`loop_guard`/`normalize_unicode`,
+   `temperature 1.6→0.2`, `tool_budget=4`, `verify=false` (đo được: tiết kiệm ~43% cost).
+4. **Viết lại `prompt.txt`** — tool-first, grounding + refuse (không bịa), công thức floor chính xác,
+   không lặp PII, coi order note là **DATA** (chống injection).
+5. **🔑 Arithmetic guardrail (đòn quyết định)** — wrapper **tự tính lại total từ chính dữ liệu tool**
+   của agent (`unit_price_vnd`, `percent`, `cost_vnd` trong `trace`) rồi ghi đè đáp án. Hợp lệ theo
+   `RULES.md` (giá lấy từ tool sống, không phải bảng tra). → `correct` **0.45 → 0.98**.
+6. **Hardening cho private** — qty **suy từ trọng lượng** (`ship_weight/unit_weight`, miễn nhiễm
+   paraphrase) + injection-proof (giá chỉ từ tool, cắt bỏ note). Qua **audit đối kháng 5 góc nhìn →
+   12 fix**, 36/36 unit test, public vẫn 100.
 
-(macOS Intel không có sẵn binary — trên Intel hãy chạy từ mã nguồn với Python + `openai`.)
-macOS lần đầu (Gatekeeper): `xattr -dr com.apple.quarantine bin/<phase>/*`. Lịch phát hành:
-`practice` ngay từ đầu · public **sim** ở 1h, **score** ở 2h · private **sim** ở 3h, **score** ở 3.5h.
+---
 
-## Tạo lưu lượng thực tế (tự chọn mức tải)
-```bash
-# 200 người dùng x 12 lượt = 2400 request trải trên một khoảng thời gian mô phỏng
-./bin/practice/observathon-sim --users 200 --turns 12 --concurrency 12 \
-    --config solution/config.json --wrapper solution/wrapper.py --out run_output.json
+## 📈 Kết quả Public: **81 → 100**
+
+Chìa khóa: **arithmetic guardrail** sửa số học sai của LLM (49/120 → 114/120 đúng).
+
+| dimension (trọng số) | v1 — 81.01 | v2 — **100.0** |
+|---|---|---|
+| correct (0.32) | 0.453 | **0.980** |
+| quality (0.16) | 0.671 | 0.988 |
+| error (0.13)   | 1.000 | 1.000 |
+| latency (0.08) | 0.525 | 0.663 |
+| cost (0.09)    | 0.287 | 0.733 |
+| drift (0.07)   | 0.667 | 1.000 |
+| prompt (0.15)  | 0.690 | 0.940 |
+| diagnosis-F1   | 0.952 | 0.952 |
+| **HEADLINE**   | **81.01** | **100.0 / 100** |
+
+**v1 — 81.01 (trước guardrail):**
+
+![Public score 81](images/score-public-81.png)
+
+**v2 — 100/100 (sau guardrail):**
+
+![Public score 100](images/score-public-100.png)
+
+---
+
+## 🔒 Kết quả Private
+
+*Chờ binary `bin/private/observathon-sim`. Wrapper đã hardening (paraphrase + injection). Cập nhật sau:*
+
+![Private score](images/score-private.png)
+
+`HEADLINE: __ / 100` · *(placeholder)*
+
+---
+
+## 📁 Cấu trúc nộp
+
 ```
-- `--users N` số người dùng · `--turns K` request mỗi người (K lớn → quality-drift rõ hơn) · `--rps` tốc độ đến · `--concurrency` số request song song.
-- **Lưu lượng practice NGẪU NHIÊN mỗi lần** (in ra `random run seed = …`; truyền `--seed <giá trị>` để tái hiện). Việc chấm điểm luôn dùng bộ public/private **cố định**, nên mọi đội được xếp hạng trên cùng lưu lượng.
+solution/   config.json · prompt.txt · examples.json · wrapper.py · findings.json · notes.md
+submission/ manifest.json · TEMPLATE_FINDINGS.md
+run_output.json · score.json
+run_public.ps1 · score_public.ps1   (helper chạy/chấm qua Docker)
+```
 
-## Cách chấm điểm
-`100 × (0.32·correct + 0.16·quality + 0.13·error + 0.08·latency + 0.09·cost + 0.07·drift +
-0.15·prompt) + tối đa 22 × diagnosis-F1`. Quality = LLM judge (`gpt-5.4-mini`, có offline dự
-phòng). `prompt` dựa trên **kết quả thực tế** (grounding/số học/tiết kiệm tool/PII/chống
-injection trừ đi phần prompt quá dài).
-
-## Bạn nộp gì (git push `solution/` + `run_output.json` + `score.json`)
-`config.json` · `prompt.txt` · `examples.json` (tùy chọn) · `wrapper.py` · `findings.json`.
-
-## Các giai đoạn
-- **Bây giờ → 1h**: chẩn đoán bằng binary practice; viết lại prompt + config.
-- **1h** public **sim** · **2h** public **score** → commit, push, leo bảng.
-- **3h** private **sim** (bộ giữ kín + diễn đạt lại + đòn **injection**) · **3.5h** private **score** → push (lần cuối).
-
-Xem `docs/FAULT_CLASSES.md`, `docs/PROMPT_OPTIMIZATION.md`, `docs/WRAPPER_API.md`, `docs/SUBMIT.md`. Luật: `../RULES.md`.

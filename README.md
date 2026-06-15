@@ -71,12 +71,29 @@ Chìa khóa: **arithmetic guardrail** sửa số học sai của LLM (49/120 →
 
 ---
 
-## 🔒 Kết quả Private
+## 🔒 Kết quả Private (held-out + paraphrase + injection + loyalty F13)
 
+Bộ 80 câu giữ kín: **diễn đạt lại** + **injection** (note nhét giá giả) + **loyalty/coupon stacking (F13)**
+(dịch vụ loyalty đôi khi lỗi — config retry phục hồi).
+
+| dimension (trọng số) | private |
+|---|---|
+| correct (0.32) | 0.725 (55/80) |
+| quality (0.16) | 0.835 |
+| error (0.13)   | 1.000 |
+| latency (0.08) | 0.713 |
+| cost (0.09)    | 0.573 |
+| drift (0.07)   | 0.748 |
+| prompt (0.15)  | 0.816 |
+| **diagnosis-F1** | **1.000** ✅ (chẩn đoán đúng toàn bộ fault, gồm injection + loyalty) |
+| **HEADLINE**   | **99.9 / 100** |
+
+- ✅ **Injection 0/20 bị poison** — guardrail dùng giá thật từ `check_stock`, bỏ qua note giả.
+- ✅ **Loyalty/F13** — retry config phục hồi lỗi dịch vụ loyalty; discount stacked đọc từ `get_discount`.
+- ✅ **diagnosis-F1 = 1.0** (max bonus 22 điểm) · 0 PII · refusal đúng (hết hàng / không phục vụ).
+- Residual 0.1 điểm: nghi công thức discount **stacked** (SALE15→30, WINNER→20, VIP20→40) trên ~19 đơn loyal (chưa xác nhận).
 
 ![Private score](images/score-private.png)
-
-`HEADLINE: 99.9 / 100` · *(placeholder)*
 
 ---
 

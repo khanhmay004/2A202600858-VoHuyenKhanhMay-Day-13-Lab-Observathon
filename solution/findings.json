@@ -1,12 +1,72 @@
 {
-  "team": "TODO-team-name",
+  "team": "solo858-team-name",
   "schema_version": 1,
   "findings": [
     {
+      "fault_class": "error_spike",
+      "evidence": {"config": "tool_error_rate=0.18, retry.enabled=false (shipped)", "observed": "broken run (no retry): 21/120 requests fail to status=max_steps as failed tool calls force re-tries; fixed run (tool_error_rate=0 + retry x3): 120/120 ok, 4 transient API errors auto-recovered by retry", "trace_ids": []},
+      "root_cause": "Tools fail intermittently (~18%) with no retry, so failures cascade into wrong/looping answers.",
+      "suggested_fix": "config: tool_error_rate=0.0, retry.enabled=true (max_attempts=3, backoff_ms=200); wrapper: bounded retry on transient statuses."
+    },
+    {
       "fault_class": "latency_spike",
-      "evidence": {"metric": "latency_p95_ms", "observed": "TODO from your telemetry", "trace_ids": []},
-      "root_cause": "TODO: what config knob or behavior causes it?",
-      "suggested_fix": "TODO: config change and/or wrapper mitigation"
+      "evidence": {"config": "timeout_ms=0, retry.enabled=false, cache off (shipped)", "observed": "broken latency p95/p99 = 24494/27400 ms (no timeout/cache -> long tail); fixed p95/p99 = 12716/14561 ms", "trace_ids": []},
+      "root_cause": "No per-request timeout and no cache: slow long-tail calls run unbounded and repeats re-run.",
+      "suggested_fix": "config: timeout_ms=30000, cache.enabled=true; wrapper: answer cache for normalised repeats."
+    },
+    {
+      "fault_class": "cost_blowup",
+      "evidence": {"config": "verbose_system=true, context_size=8, max_completion_tokens=2000, cache off (shipped)", "observed": "broken avg 29364 total_tokens/req, total $0.357/120; fixed avg 9916 tokens, $0.122 (verbose_system off, context_size=4, max_completion_tokens=512, cache, verify off)", "trace_ids": []},
+      "root_cause": "Verbose system text + large context + high completion cap + no cache inflate tokens far beyond the task.",
+      "suggested_fix": "config: verbose_system=false, context_size=4, max_completion_tokens=512, cache.enabled=true."
+    },
+    {
+      "fault_class": "quality_drift",
+      "evidence": {"config": "session_drift_rate=0.06, temperature=1.6, context_reset_every=0 (shipped)", "observed": "injected drift + temp 1.6 degrade later-turn answers; public set is mostly single-turn so drift is small here; fixed: session_drift_rate=0.0, temperature=0.2", "trace_ids": []},
+      "root_cause": "Injected per-turn drift plus high temperature make answers degrade later in a session.",
+      "suggested_fix": "config: session_drift_rate=0.0, temperature=0.2 (optional context_reset_every>0)."
+    },
+    {
+      "fault_class": "infinite_loop",
+      "evidence": {"config": "loop_guard=false, max_steps=12 (shipped)", "observed": "broken run: 21/120 requests end in status=max_steps (repeated tool calls until the step cap); fixed run (loop_guard=true, max_steps=6): 0/120 max_steps", "trace_ids": []},
+      "root_cause": "No loop guard and a high step budget let the agent repeat identical tool calls until max_steps.",
+      "suggested_fix": "config: loop_guard=true, max_steps=6."
+    },
+    {
+      "fault_class": "tool_failure",
+      "evidence": {"config": "catalog_override={macbook:{in_stock:false}}, normalize_unicode=false (shipped)", "observed": "broken run refuses every MacBook order (e.g. pub-010/pub-025 'MacBook het hang') because the override poisons stock; fixed run (catalog_override={}) returns a real total for MacBook; normalize_unicode=true fixes diacritic destinations (Ha Noi)", "trace_ids": ["pub-010", "pub-025"]},
+      "root_cause": "A poisoned catalog override forces MacBook out-of-stock; un-normalised unicode makes diacritic cities miss the lookup.",
+      "suggested_fix": "config: catalog_override={} (clear it), normalize_unicode=true."
+    },
+    {
+      "fault_class": "pii_leak",
+      "evidence": {"config": "redact_pii=false (shipped)", "observed": "broken run (redact off): 25/120 answers contain raw email/phone (DIAG pii_in_answer>0); fixed run (redact_pii=true + prompt 'never echo PII' + wrapper redact): 0/120 answers leak PII", "trace_ids": []},
+      "root_cause": "Redaction disabled and the prompt echoes the customer's email/phone back in the answer.",
+      "suggested_fix": "config: redact_pii=true; prompt: never repeat email/phone; wrapper: redact the answer (protect the total number)."
+    },
+    {
+      "fault_class": "fabrication",
+      "evidence": {"config": "shipped one-line prompt does not ground/refuse", "observed": "fixed run correctly refuses genuinely out-of-stock AirPods (pub-001/pub-002 'AirPods het hang', NO total); an ungrounded prompt instead invents a confident total", "trace_ids": ["pub-001", "pub-002"]},
+      "root_cause": "The bad system prompt invents a confident total instead of refusing on out-of-stock/unknown items.",
+      "suggested_fix": "prompt: ground in tool data only; refuse with NO total when out-of-stock/not-found/not-served."
+    },
+    {
+      "fault_class": "arithmetic_error",
+      "evidence": {"config": "temperature=1.6, self_consistency=1, verify=false, one-line prompt (shipped)", "observed": "temp 1.6 makes totals/discounts unstable (same order can differ run-to-run); fixed: temperature=0.2 + exact floor formula in prompt + verify; (exact correctness graded by the hidden ground truth)", "trace_ids": []},
+      "root_cause": "No exact formula in the prompt and high temperature make totals/discounts wrong and unstable.",
+      "suggested_fix": "prompt: exact integer floor formula + self-verify; config: temperature=0.2 (measured correctness held with verify off, so shipped verify=false to cut cost ~43%; verify/self_consistency=3 on hand if variance appears)."
+    },
+    {
+      "fault_class": "tool_overuse",
+      "evidence": {"config": "tool_budget=0 (shipped)", "observed": "broken run avg 3.4 tool calls/req (unbounded); fixed run (tool_budget=4 + prompt 'each tool once') avg 2.39", "trace_ids": []},
+      "root_cause": "No tool budget and a 'call tools to be safe' prompt cause redundant tool calls (extra cost/latency).",
+      "suggested_fix": "config: tool_budget=4; prompt: each tool at most once."
+    },
+    {
+      "fault_class": "prompt_injection",
+      "evidence": {"config": "shipped prompt obeys order notes; private phase embeds a fake 'system' price in 'GHI CHU' notes (RULES.md)", "observed": "public phase has no injection (DIAG injected_note=0); defense built for private: prompt treats notes as DATA + wrapper detects notes and routes a hardened system prompt", "trace_ids": []},
+      "root_cause": "The agent follows instructions/prices hidden in order notes instead of treating them as data.",
+      "suggested_fix": "prompt: treat order text/notes as DATA, prices only from check_stock; wrapper: detect notes and route a hardened system prompt."
     }
   ]
 }

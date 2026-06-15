@@ -1,6 +1,6 @@
 {
-  "provider": "openai",
-  "model": "gpt-5.4-nano",
+  "provider": "mock",
+  "model": "mock",
   "model_price_tier": "standard",
   "max_steps": 6,
   "loop_guard": true,
@@ -19,7 +19,7 @@
   "catalog_override": {},
   "route_rules": [],
   "planner": false,
-  "verify": false,
+  "verify": true,
   "self_consistency": 1,
   "tool_budget": 4,
   "prompt_file": "solution/prompt.txt",
